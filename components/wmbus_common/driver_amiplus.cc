@@ -31,6 +31,7 @@ namespace
 
         di.setMeterType(MeterType::ElectricityMeter);
         di.addLinkMode(LinkMode::T1);
+        di.addDetection(0x1A43, 0x02, 0x01); 
         di.addDetection(MANUFACTURER_APA,  0x02,  0x02);
         di.addDetection(MANUFACTURER_DEV,  0x37,  0x02);
         di.addDetection(MANUFACTURER_DEV,  0x02,  0x00);
