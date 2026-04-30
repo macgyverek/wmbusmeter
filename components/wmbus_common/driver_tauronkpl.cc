@@ -31,7 +31,7 @@ namespace
         di.setDefaultFields("name,id,total_energy_consumption_kwh,current_power_consumption_kw,total_energy_production_kwh,current_power_production_kw,voltage_at_phase_1_v,voltage_at_phase_2_v,voltage_at_phase_3_v,timestamp");
         di.setMeterType(MeterType::ElectricityMeter);
         di.addLinkMode(LinkMode::T1);
-        di.addDetection(MANUFACTURER_KPL,  0x02,  0x01);
+        di.addDetection(0x1A43, 0x02, 0x01); // FRC
         di.usesProcessContent();
         di.setConstructor([](MeterInfo& mi, DriverInfo& di){ return std::shared_ptr<Meter>(new Driver(mi, di)); });
     });
