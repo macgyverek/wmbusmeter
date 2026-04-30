@@ -22,8 +22,7 @@ namespace
     struct Driver : public virtual MeterCommonImplementation
     {
         Driver(MeterInfo &mi, DriverInfo &di);
-
-        void processContent(Telegram *t);
+        void processContent(Telegram *t) override;
     };
 
     static bool ok = registerDriver([](DriverInfo&di)
@@ -34,7 +33,7 @@ namespace
         di.addLinkMode(LinkMode::T1);
         di.addDetection(MANUFACTURER_KPL,  0x02,  0x01);
         di.usesProcessContent();
-        di.setConstructor([](MeterInfo& mi, DriverInfo& di){ return shared_ptr<Meter>(new Driver(mi, di)); });
+        di.setConstructor([](MeterInfo& mi, DriverInfo& di){ return std::shared_ptr<Meter>(new Driver(mi, di)); });
     });
 
     Driver::Driver(MeterInfo &mi, DriverInfo &di) : MeterCommonImplementation(mi, di)
@@ -137,57 +136,38 @@ namespace
             .set(VIFRange::AnyPowerVIF)
             );
     }
-
-    void Driver::processContent(Telegram *t)
+	
+	void Driver::processContent(Telegram *t)
     {
-        // The KPL/Tauron meter prepends a 2-byte prefix (60 9B) before
-        // the standard DIF/VIF data records. This causes the DV parser
-        // to desync when called during normal TPL parsing.
-        //
-        // Fix: patch the frame in-place, replacing the 2-byte prefix with
-        // standard filler bytes (2F 2F) that the parser knows to skip,
-        // then re-run DV parsing and field extraction from scratch.
-
-        debug("(tauronkpl) processContent called, header_size=%d frame_size=%d\n",
+        debug("(tauronkpl) processContent hs=%d size=%d\n",
               t->header_size, (int)t->frame.size());
 
         int hs = t->header_size;
-        if (hs + 1 >= (int)t->frame.size()) {
-            debug("(tauronkpl) frame too small, returning\n");
+
+        if (hs + 1 >= (int)t->frame.size())
             return;
-        }
 
         uchar b0 = t->frame[hs];
         uchar b1 = t->frame[hs + 1];
 
-        debug("(tauronkpl) bytes at header_size: %02x %02x\n", b0, b1);
+        debug("(tauronkpl) prefix %02x %02x\n", b0, b1);
 
-        // Only patch if we see the expected prefix
-        if (b0 != 0x60 || b1 != 0x9B) {
-            debug("(tauronkpl) prefix mismatch, expected 60 9B, returning\n");
+        if (b0 != 0x60 || b1 != 0x9B)
             return;
-        }
 
-        // Replace the problematic prefix with filler bytes
+        // patch prefix → filler
         t->frame[hs] = 0x2F;
         t->frame[hs + 1] = 0x2F;
 
-        // Clear the broken DV entries from the first parse attempt
         t->dv_entries.clear();
 
-        // Re-parse the payload from the beginning (now with 2F 2F filler)
-        vector<uchar>::iterator pos = t->frame.begin() + hs;
+        std::vector<uchar>::iterator pos = t->frame.begin() + hs;
         int remaining = (int)t->frame.size() - (int)t->suffix_size - hs;
 
-        debug("(tauronkpl) re-parsing %d bytes from offset %d\n", remaining, hs);
+        debug("(tauronkpl) reparse %d bytes\n", remaining);
 
         parseDV(t, t->frame, pos, remaining, &t->dv_entries);
 
-        debug("(tauronkpl) parseDV done, %d dv_entries found\n", (int)t->dv_entries.size());
-
-        // Re-run field extractors on the corrected DV entries
         processFieldExtractors(t);
-
-        debug("(tauronkpl) processFieldExtractors done\n");
     }
 }
